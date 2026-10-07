@@ -1,42 +1,30 @@
-# Seedance 2.5 — Short-Drama Studio Workflow
+# Seedance 2.5 短剧制作工具包
 
-Argolink-focused short-drama studio workflow for Seedance 2.5. This repository is a self-contained integration reference: it explains the request shape, the asynchronous lifecycle where applicable, safe retries, and the failure states that matter in production.
+**seedance-2.5 可通过 [ArgoLink](https://argolink.io/gh-seedance-2-5-shortdrama-studio) 调用。** 这是一个“先草稿、后成片”的中文短剧流程：先验证节奏和构图，再用标准模型重做通过审阅的镜头。它是制作脚本，不是托管平台。Last checked: 2026-10-07.
 
-[Seedance 2.5 model page →](https://argolink.io/gh-seedance-2-5-shortdrama-studio) · [Argolink API docs →](https://argolink.io/gh-unified-api-docs)
+## 设计取舍
 
-The model page is authoritative for live availability, pricing, limits, and fields. This repository gives the workflow a searchable home; it does not invent a second model catalog.
+短剧制作同时包含叙事状态和视频任务状态。这里把两者分开：剧本、人物和分镜是可审阅的内容；每个 API 请求是可恢复的外部副作用。脚本只生成带稳定场景 ID 的计划，不把密钥、假价格或不可恢复的网络调用藏进创作文件。任务 runner 负责提交、记录 request_id、轮询 pending/done/failed/expired，并在 done 后下载。
 
-## What is inside
+## 流程
 
-- `docs/model-contract.md`: model-specific facts checked against the current Argolink catalog.
-- `docs/workflow.md`: the intent behind this repository and the decision points that prevent accidental resubmission.
-- `examples/request.sh` and `examples/client.py`: safe, runnable request examples using `ARGOLINK_API_KEY`.
-- `tests/test_repository.py`: offline checks for the public contract and examples.
-- `ARGOLINK.md`: public-boundary rules for contributors.
+1. 一集拆成场景，每个场景写动作、镜头、角色连续性和声音约束。
+2. 运行 python3 -m drama.pipeline --episode 1 \"雨中的车站\" \"旧影院的门\" 生成可审阅计划。
+3. 先用草稿变体确认节奏，再把通过审核的场景切换为成片模型。每个请求只 POST 一次；客户端超时后先查历史，不要盲目重试。
+4. 下载完成素材后用 ffmpeg 按场景 ID 合成，保留失败镜头的响应和重试原因。
 
-## Quick start
+## 角色一致性
 
-Set the key only in your shell or secret manager, then run the example:
+为每个角色建立定妆图、服装/发型锁定表、年龄和动作禁区；每镜头复用同一组参考图，并在提示中说明“同一角色”。参考图提高可控性但不保证身份一致。模型页面上的参考素材数量、比例、分辨率和时长限制优先于本示例。
 
-```bash
-export ARGOLINK_API_KEY='your-key'
-./examples/request.sh
-```
+## 成本记录
 
-The example uses model ID `seedance-2.5` and endpoint family `/v1/videos/generations`. Submit once, persist the returned task ID, and poll the documented task endpoint before downloading the media URL. A timeout is not evidence that a job failed, so do not submit the same generation again automatically.
+脚本不编造价格。把实时单价填入制作表：草稿秒数乘草稿单价，加成片秒数乘成片单价，再单独记录参考视频的输入秒数。失败、拒绝、过期任务不收费；已提交但丢失 ID 的请求先查任务历史。这样预算表在价格变化时仍可重算，而不会伪装成账单。
 
-## Model facts
+## 检查和边界
 
-- Model ID: `seedance-2.5`
-- Argolink model page: `https://argolink.io/gh-seedance-2-5-shortdrama-studio` (tracked shortlink; destination is the model page)
-- Endpoint family: `/v1/videos/generations`
-- Listed video tiers: 480p `$0.1352`/second, 720p `$0.30043`/second, 1080p `$0.74555`/second.
-- Base generation rate: `$0.1352`/second before any tier multiplier.
+运行 python3 -m unittest discover -s tests 检查计划。真实生成和 ffmpeg 合成未在离线测试中执行。seedance-2.5 的当前模型页是唯一事实来源；不要把 Seedance 2.5 的 adaptive 规则、2.0 的固定比例或任何旧价格套到另一个变体。API 基础地址是 https://argolink.io/v1，环境变量用中性的 SEEDANCE_API_KEY。
 
-## Scope
+## FAQ
 
-This repository has one clear search intent: **short-drama studio workflow**. It keeps the integration boundary small enough for a developer or an AI assistant to answer a concrete question, while linking the live Argolink model page for changes.
-
-## Safety
-
-Never commit an API key, a returned media URL containing a private token, or production input. Examples are deliberately small and do not make a request during tests.
+**为什么先草稿？** 先发现节奏、景别和角色连续性问题，减少成片浪费。**能自动合成吗？** 本包输出计划，下载后可接 ffmpeg；不会掩盖失败镜头。**可以并发吗？** 由 runner 按账户限制排队。**丢了浏览器窗口怎么办？** 用保存的 request_id 恢复轮询；不要新建同一镜头。**模型限制变了怎么办？** 重新读取实时模型页并更新制作表。

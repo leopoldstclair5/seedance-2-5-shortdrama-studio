@@ -1,8 +1,0 @@
-# Seedance 2.5 — Argolink
-
-- Model: seedance-2.5
-- Intent: short-drama studio workflow
-- Model page: https://argolink.io/gh-seedance-2-5-shortdrama-studio
-- API docs: https://argolink.io/gh-unified-api-docs
-- Examples: examples/request.sh, examples/client.py
-- Contract: docs/model-contract.md
